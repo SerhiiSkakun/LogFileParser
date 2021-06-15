@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-public class LogRecord {
+public class LogRecord implements Comparable<LogRecord> {
     private int rowNumber;
     private String logName;
     private LocalDate date;
@@ -28,7 +28,8 @@ public class LogRecord {
     private String messageValuesStr;
     private int similarRowsQuantity;
 
-    public LogRecord() {}
+    public LogRecord() {
+    }
 
     public LogRecord(String logName, LocalDate date, LocalTime time, Level priority, String thread, String category, List<String> message) {
         this.logName = logName;
@@ -52,10 +53,6 @@ public class LogRecord {
         return logName;
     }
 
-    public void setLogName(String logName) {
-        this.logName = logName;
-    }
-
     public LocalDate getDate() {
         return date;
     }
@@ -76,10 +73,6 @@ public class LogRecord {
         return priority;
     }
 
-    public void setPriority(Level priority) {
-        this.priority = priority;
-    }
-
     public String getThread() {
         return thread;
     }
@@ -90,10 +83,6 @@ public class LogRecord {
 
     public String getCategory() {
         return category;
-    }
-
-    public void setCategory(String category) {
-        this.category = category;
     }
 
     public List<String> getMessage() {
@@ -187,6 +176,11 @@ public class LogRecord {
     @Override
     public int hashCode() {
         return Objects.hash(priority, messageStr, stackTraceStr);
+    }
+
+    @Override
+    public int compareTo(LogRecord o) {
+        return this.rowNumber - o.rowNumber;
     }
 }
 

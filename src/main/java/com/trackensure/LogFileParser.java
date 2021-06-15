@@ -14,9 +14,10 @@ public class LogFileParser {
     private static final Class<LogFileParser> CLAZZ = LogFileParser.class;
     private static final Logger logger = Logger.getLogger(CLAZZ);
 
-    final int MAX_ROWS_FOR_SHEET = 1_000_000;
-    final double CONFORMITY_POWER = 0.75;
-    private final String parsedFileName;
+    private final int MAX_ROWS_FOR_SHEET = 1_000_000;
+    private final double CONFORMITY_POWER = 0.75;
+    private final Pattern PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} ");
+
     private final Reader reader;
     private final boolean isUniqRecords;
     private final boolean isGatherMessages;
@@ -25,8 +26,21 @@ public class LogFileParser {
     private final int startRow;
     private final int finishRow;
 
-    public LogFileParser(String parsedFilePath, String parsedFileName, boolean isUniqRecords, boolean isGatherMessages, boolean isErrorsOnly, boolean isTeStackTraceOnly, int startRow, int finishRow) throws TEAppException {
-        this.parsedFileName = parsedFileName;
+    private final Collection<LogRecord> logRecordCollection;
+    private final Map<Integer, Integer> similarRowsQuantityMapByHash;
+    private String logName;
+    private LogRecord record;
+    private List<String> stackTrace;
+    private List<String> error;
+
+    private boolean wasMessage = false;
+    private boolean wasStackTrace = false;
+    private boolean needInterrupt = false;
+    private boolean isMoreRows = true;
+
+    public LogFileParser(String parsedFilePath, String parsedFileName, boolean isUniqRecords, boolean isGatherMessages,
+                         boolean isErrorsOnly, boolean isTeStackTraceOnly, int startRow, int finishRow) throws TEAppException {
+        this.logName = parsedFileName;
         String fullFileName = parsedFilePath + "/" + parsedFileName;
         this.isUniqRecords = isUniqRecords;
         this.isGatherMessages = isGatherMessages;
@@ -41,63 +55,64 @@ public class LogFileParser {
             logger.error("File not exist: " + fullFileName, e);
             throw new TEAppException(e.getMessage(), e.getCause());
         }
+        this.logRecordCollection = (isUniqRecords) ? new LinkedHashSet<>() : new ArrayList<>();
+        this.similarRowsQuantityMapByHash = (isUniqRecords) ? new HashMap<>() : null;
     }
 
-    public List<List<LogRecord>> parseLogFile() throws TEAppException{
-        Collection<LogRecord> logRecordCollection = (isUniqRecords) ? new LinkedHashSet<>() : new ArrayList<>();
-        Map<Integer, Integer> similarRowsQuantityMapByHash = (isUniqRecords) ? new HashMap<>() : null;
-        LogRecord record = null;
-        String row;
-        List<String> stackTrace = null;
-        List<String> error = null;
-        boolean wasMessage = false;
-        boolean wasStackTrace = false;
-        boolean needInterrupt = false;
-        String logName = parsedFileName;
-
-        Pattern pattern = Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} ");
-        logger.info("parseLogFile() - start parse file to records.");
-        try (LineNumberReader bufferedReader = new LineNumberReader(reader)) {
-            if (startRow > 0 && finishRow > startRow) {
-                while (bufferedReader.getLineNumber() < startRow -1) {
-                    bufferedReader.readLine();
-                }
+    public List<List<LogRecord>> parseLogFile() throws TEAppException {
+        try (LineNumberReader br = new LineNumberReader(reader)) {
+            br.lines()
+                    .skip((startRow > 0) ? startRow - 1 : 0)
+                    .filter(row -> isMoreRows)
+                    .forEach(row -> parseFileToRecords(row.trim(), br.getLineNumber())); //first pass
+            if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR || record.getPriority() == Level.FATAL || record.getPriority() == Level.OFF)) {
+                recordAdd(record, stackTrace, error, logRecordCollection, similarRowsQuantityMapByHash); //add last record
             }
-            while ((row = bufferedReader.readLine()) != null) {
-                if (finishRow != 0 && bufferedReader.getLineNumber() > finishRow) {
-                    needInterrupt = true;
-                }
+            logRecordCollection.forEach(logRecord -> logRecord.setSimilarRowsQuantity((isUniqRecords) ? similarRowsQuantityMapByHash.get(logRecord.hashCode()) : 1)); //set SimilarRowsQuantity if isUniqRecords == true
+            List<LogRecord> uniqLogRecordListAssembled = (isGatherMessages) ? joinRecordWithSimilarMessages(logRecordCollection) : new ArrayList<>(logRecordCollection); //second pass (if needed)
+            Collections.sort(uniqLogRecordListAssembled);
+            return splitListToSheets(uniqLogRecordListAssembled); //split by 1_000_000 records
+        } catch (Exception e) {
+            logger.error("parseLogFile()", e);
+            throw new TEAppException(e.getMessage(), e.getCause());
+        }
+    }
 
-                row = row.trim();
-                if (row.contains("** /")) { // label of start log
-                    logName = row.substring(row.lastIndexOf("/")+1, row.indexOf(" **"));
-                    if (error != null) {
-                        if (record == null) {
-                            record = new LogRecord();
-                            record.setRowNumber(bufferedReader.getLineNumber());
-                        }
-                        record.setError(error);
+    private void parseFileToRecords(String row, int rowNumber) throws RuntimeException {
+        logger.info("parseFileToRecords() - start parse file to records.");
+        try {
+            if (finishRow != 0 && rowNumber > finishRow) needInterrupt = true;
+            System.out.println(rowNumber);
+            if (row.contains("** /")) { // label of start log
+                logName = row.substring(row.lastIndexOf("/") + 1, row.indexOf(" **"));
+                if (error != null) {
+                    if (record == null) {
+                        record = new LogRecord();
+                        record.setRowNumber(rowNumber);
                     }
-                    wasMessage = false;
-                    wasStackTrace = false;
-                } else if (pattern.matcher(row).find()) { //row starts with date-time
-                    if(needInterrupt) break;
-                    if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR)) {
+                    record.setError(error);
+                }
+                wasMessage = false;
+                wasStackTrace = false;
+            } else if (PATTERN.matcher(row).find()) { //row starts with date-time
+                if (!needInterrupt) {
+                    if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR || record.getPriority() == Level.FATAL || record.getPriority() == Level.OFF)) {
                         recordAdd(record, stackTrace, error, logRecordCollection, similarRowsQuantityMapByHash);
                     }
                     error = null;
                     stackTrace = null;
                     record = fillMainFields(row, logName);
-                    record.setRowNumber(bufferedReader.getLineNumber());
+                    record.setRowNumber(rowNumber);
                     wasMessage = true;
                     wasStackTrace = false;
-                } else if (row.startsWith("at ") || row.matches("... \\d+ more")) { //if stackTrace row
-                    stackTrace = fillStackTrace (row, stackTrace, isTeStackTraceOnly);
-                    wasMessage = false;
-                    wasStackTrace = true;
-                } else if (row.contains("## /")) { //label of end log)
-                    if(needInterrupt) break;
-                    if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR)) {
+                } else isMoreRows = false;
+            } else if (row.startsWith("at ") || row.matches("... \\d+ more")) { //if stackTrace row
+                stackTrace = fillStackTrace(row, stackTrace, isTeStackTraceOnly);
+                wasMessage = false;
+                wasStackTrace = true;
+            } else if (row.contains("## /")) { //label of end log)
+                if (!needInterrupt) {
+                    if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR || record.getPriority() == Level.FATAL || record.getPriority() == Level.OFF)) {
                         recordAdd(record, stackTrace, error, logRecordCollection, similarRowsQuantityMapByHash);
                     }
                     error = null;
@@ -106,39 +121,33 @@ public class LogFileParser {
                     record = null;
                     wasMessage = false;
                     wasStackTrace = false;
-                } else if(!row.equals("") && !row.equals("--")) { //other (unparsed) row
-                    if (wasMessage) {
-                        if (record.getMessage() == null) {
-                            record.setMessage(new ArrayList<>());
-                        }
-                        record.getMessage().add(row);
-                    } else if (wasStackTrace) {
-                        stackTrace.add(row);
-                    } else {
-                        if(needInterrupt) break;
+                } else isMoreRows = false;
+            } else if (!row.equals("") && !row.equals("--")) { //other (unparsed) row
+                if (wasMessage) {
+                    if (record.getMessage() == null) {
+                        record.setMessage(new ArrayList<>());
+                    }
+                    record.getMessage().add(row);
+                } else if (wasStackTrace) {
+                    stackTrace.add(row);
+                } else {
+                    if (!needInterrupt) {
                         if (record == null) {
                             record = new LogRecord();
-                            record.setRowNumber(bufferedReader.getLineNumber());
+                            record.setRowNumber(rowNumber);
                         }
                         if (error == null) {
                             error = new ArrayList<>();
                         }
                         error.add(row);
-                    }
+                    } else isMoreRows = false;
                 }
             }
-            if (record != null && (!isErrorsOnly || record.getPriority() == Level.ERROR)) {
-                recordAdd(record, stackTrace, error, logRecordCollection, similarRowsQuantityMapByHash);
-            }
-            logRecordCollection.forEach(logRecord -> logRecord.setSimilarRowsQuantity((isUniqRecords) ? similarRowsQuantityMapByHash.get(logRecord.hashCode()) : 1));
-            logger.info("parseLogFile() - finish parse file to records.");
-            List<LogRecord> uniqLogRecordListAssembled = (isGatherMessages) ? joinRecordWithMessageDuplicates (logRecordCollection) : new ArrayList<>(logRecordCollection);
-            uniqLogRecordListAssembled = uniqLogRecordListAssembled.stream().sorted(Comparator.comparing(LogRecord::getRowNumber)).collect(Collectors.toList());
-            return splitListToSheets(uniqLogRecordListAssembled);
-        } catch (IOException e) {
-            logger.error("parseLogFile()", e);
-            throw new TEAppException(e.getMessage(), e.getCause());
+        } catch (Exception e) {
+            logger.error("parseFileToRecords()", e);
+            throw new RuntimeException(e.getMessage(), e.getCause());
         }
+        logger.info("parseLogFile() - finish parse file to records.");
     }
 
     private LogRecord fillMainFields(String row, String logName) {
@@ -202,7 +211,7 @@ public class LogFileParser {
     private List<LogRecord> joinRecordWithMessageDuplicates(Collection<LogRecord> logRecordCollection) throws TEAppException{
         logger.info("joinRecordWithMessageDuplicates() - start remove message duplicates.");
         Map<String, Set<LogRecord>> duplicatesMap = logRecordCollection.stream()
-                .collect(Collectors.groupingBy(logRecord -> logRecord.getPriority() + logRecord.getCategory() + logRecord.getStackTraceStr(), Collectors.toSet()));
+                .collect(Collectors.groupingBy(logRecord -> logRecord.getPriority() + logRecord.getCategory() + logRecord.getStackTraceStr(), Collectors.toCollection(TreeSet<LogRecord>::new)));
         List<LogRecord> uniqLogRecordListAssembled = new ArrayList<>();
         List<LogRecord> uniqLogRecordList;
         boolean isUniq;
@@ -236,7 +245,7 @@ public class LogFileParser {
                 }
                 uniqLogRecordListAssembled.addAll(uniqLogRecordList);
             }
-        } catch (TEAppException e) {
+        } catch (Exception e) {
             logger.error("joinRecordWithMessageDuplicates()", e);
             throw new TEAppException(e.getMessage(), e.getCause());
         }
