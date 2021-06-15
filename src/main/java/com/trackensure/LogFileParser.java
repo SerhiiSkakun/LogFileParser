@@ -67,6 +67,7 @@ public class LogFileParser {
                 if (finishRow != 0 && bufferedReader.getLineNumber() > finishRow) {
                     needInterrupt = true;
                 }
+
                 row = row.trim();
                 if (row.contains("** /")) { // label of start log
                     logName = row.substring(row.lastIndexOf("/")+1, row.indexOf(" **"));
@@ -105,9 +106,7 @@ public class LogFileParser {
                     record = null;
                     wasMessage = false;
                     wasStackTrace = false;
-                } else if (row.equals("") || row.equals("--")) { //empty row)
-                    continue;
-                } else { //other (unparsed) row
+                } else if(!row.equals("") && !row.equals("--")) { //other (unparsed) row
                     if (wasMessage) {
                         if (record.getMessage() == null) {
                             record.setMessage(new ArrayList<>());
@@ -184,7 +183,7 @@ public class LogFileParser {
             record.setStackTrace(stackTrace);
             record.setStackTraceStr(String.join(System.lineSeparator(), record.getStackTrace()));
         }
-        if (record.getMessage() != null && record.getMessage().size() > 0) {
+        if (record.getMessage() != null && !record.getMessage().isEmpty()) {
             String messageStr = String.join(System.lineSeparator(), record.getMessage());
             record.setMessageStr(messageStr);
             List<String> tokenList = Arrays.asList(messageStr.split("\\b"));
@@ -194,16 +193,9 @@ public class LogFileParser {
             record.setError(error);
             record.setErrorStr(String.join(System.lineSeparator(), record.getError()));
         }
-        int hash = record.hashCode();
+        logRecordCollection.add(record);
         if (isUniqRecords) {
-            if (logRecordCollection.add(record)) {
-                similarRowsQuantityMapByHash.put(hash, 1);
-            } else {
-                Integer value = similarRowsQuantityMapByHash.get(hash);
-                similarRowsQuantityMapByHash.put(hash, ++value);
-            }
-        } else {
-            logRecordCollection.add(record);
+            similarRowsQuantityMapByHash.merge(record.hashCode(), 1, Integer::sum);
         }
     }
 
