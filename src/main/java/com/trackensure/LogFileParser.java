@@ -208,7 +208,7 @@ public class LogFileParser {
         }
     }
 
-    private List<LogRecord> joinRecordWithMessageDuplicates(Collection<LogRecord> logRecordCollection) throws TEAppException{
+    private List<LogRecord> joinRecordWithSimilarMessages(Collection<LogRecord> logRecordCollection) throws TEAppException{
         logger.info("joinRecordWithMessageDuplicates() - start remove message duplicates.");
         Map<String, Set<LogRecord>> duplicatesMap = logRecordCollection.stream()
                 .collect(Collectors.groupingBy(logRecord -> logRecord.getPriority() + logRecord.getCategory() + logRecord.getStackTraceStr(), Collectors.toCollection(TreeSet<LogRecord>::new)));
