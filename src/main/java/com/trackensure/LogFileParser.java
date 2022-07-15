@@ -82,7 +82,7 @@ public class LogFileParser {
         logger.info("parseFileToRecords() - start parse file to records.");
         try {
             if (finishRow != 0 && rowNumber > finishRow) needInterrupt = true;
-            System.out.println(rowNumber);
+//            System.out.println(rowNumber);
             if (row.contains("** /")) { // label of start log
                 logName = row.substring(row.lastIndexOf("/") + 1, row.indexOf(" **"));
                 if (error != null) {
@@ -155,8 +155,8 @@ public class LogFileParser {
         String timeString = row.substring(11, 23).replace(',', '.');
         String priorityString = row.substring(24, 29).trim();
         String thread = row.substring(row.indexOf("[") + 1, row.indexOf("] ")).trim();
-        String category = row.substring(row.indexOf("] ") + 1, row.indexOf(" -")).trim();
-        String messageString = row.substring((row.indexOf(" -") + 2))
+        String category = row.substring(row.indexOf("] ") + 1, row.indexOf(" -", row.indexOf("] ") + 1)).trim();
+        String messageString = row.substring((row.indexOf(" -", row.indexOf("] ") + 1) + 2))
                 .replace("\t\t", "\t")
                 .replace("\\s\t", "\\s")
                 .replace("\t\\s", "\\s")
@@ -299,10 +299,12 @@ public class LogFileParser {
 
     private List<List<LogRecord>> splitListToSheets(List<LogRecord> uniqLogRecordListAssembled) {
         List<List<LogRecord>> logRecordListAssembled = new ArrayList<>();
-        List<LogRecord> maxRowsForSheetLogRecordList = new ArrayList<>();
+        int skipRowsNumber = 0;
         for (int i = 0; i < uniqLogRecordListAssembled.size() / MAX_ROWS_FOR_SHEET + 1; i++) {
-            uniqLogRecordListAssembled.stream().limit(MAX_ROWS_FOR_SHEET).forEach(maxRowsForSheetLogRecordList::add);
+            List<LogRecord> maxRowsForSheetLogRecordList = new ArrayList<>();
+            uniqLogRecordListAssembled.stream().skip(skipRowsNumber).limit(MAX_ROWS_FOR_SHEET).forEach(maxRowsForSheetLogRecordList::add);
             logRecordListAssembled.add(maxRowsForSheetLogRecordList);
+            skipRowsNumber += MAX_ROWS_FOR_SHEET;
         }
         return logRecordListAssembled;
     }
