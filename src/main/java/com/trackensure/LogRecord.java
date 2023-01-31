@@ -170,12 +170,12 @@ public class LogRecord implements Comparable<LogRecord> {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         LogRecord record = (LogRecord) o;
-        return Objects.equals(priority, record.priority) && Objects.equals(messageStr, record.messageStr) && Objects.equals(stackTraceStr, record.stackTraceStr);
+        return Objects.equals(category, record.category) && Objects.equals(priority, record.priority) && Objects.equals(messageStr, record.messageStr) && Objects.equals(stackTraceStr, record.stackTraceStr);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(priority, messageStr, stackTraceStr);
+        return Objects.hash(category, priority, messageStr, stackTraceStr);
     }
 
     @Override
