@@ -62,7 +62,7 @@
                         <div class="col-xs-12">
                             <input class="form-check-input"
                                    ng-model="vm.filter.isUniqRecords"
-                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath || !vm.filter.fileName"
+                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath"
                                    ng-change="vm.onChangeUniqRecords()"
                                    type="checkbox"> Unique Rows
                             </input>
@@ -70,21 +70,21 @@
                         <div class="col-xs-12">
                             <input class="form-check-input"
                                    ng-model="vm.filter.isGatherMessages"
-                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath || !vm.filter.fileName || !vm.filter.isUniqRecords"
+                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath || !vm.filter.isUniqRecords"
                                    type="checkbox"> Gather Similar Messages
                             </input>
                         </div>
                         <div class="col-xs-12">
                             <input class="form-check-input"
                                    ng-model="vm.filter.isErrorsOnly"
-                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath || !vm.filter.fileName"
+                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath"
                                    type="checkbox"> Errors Only
                             </input>
                         </div>
                         <div class="col-xs-12">
                             <input class="form-check-input"
                                    ng-model="vm.filter.isTeStackTraceOnly"
-                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath || !vm.filter.fileName"
+                                   ng-disabled="vm.isParsingFile || !vm.filter.filePath"
                                    type="checkbox"> TrackEnsure StackTrace Only
                             </input>
                         </div>
@@ -109,7 +109,7 @@
 
                     <div class="col-xs-2">
                         <button class="btn btn-te"
-                                ng-disabled="vm.isParsingFile  || !vm.filter.filePath || !vm.filter.fileName"
+                                ng-disabled="vm.isParsingFile  || !vm.filter.filePath"
                                 ng-click="vm.parseLogFile()">Parse
                             <i class="fa m-r-5"
                                ng-class="{'fa-spinner fa-pulse fa-1x fa-fw': vm.isParsingFile}">

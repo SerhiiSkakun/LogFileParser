@@ -25,17 +25,17 @@ public class LogFileParserXLS {
         try {
             wb = new SXSSFWorkbook();
             wb.setCompressTempFiles(true);
-            logger.info("generateAndSendExcelFile() - start write book.");
+            logger.info("generateAndSendExcelFile(): start write book.");
             for (int i = 0; i < logRecordListAssembled.size(); i++) {
                 List<LogRecord> dataList = logRecordListAssembled.get(i);
                 generateSheet(wb, dataList, ((Integer)i).toString());
             }
-            logger.info("generateAndSendExcelFile() - finish write book.");
+            logger.info("generateAndSendExcelFile(): finish write book.");
             prepareResponseToSendExcelFile(response, fileName);
             OutputStream outputStream = response.getOutputStream();
             wb.write(outputStream);
             outputStream.close();
-            logger.info("generateAndSendExcelFile() - file was sent - " + fileName + ".");
+            logger.info("generateAndSendExcelFile(): file has been sent: " + fileName + ".");
         } catch (Exception e) {
             logger.error("Exception in LogFileParserXLS generateExcelFile()", e);
             throw new TEAppException(e.getMessage(), e);
@@ -58,7 +58,7 @@ public class LogFileParserXLS {
     }
 
     private void generateSheet(SXSSFWorkbook wb, List<LogRecord> dataList, String sheetName) throws TEAppException {
-        logger.info("generateSheet() - start generate sheet - " + sheetName + ".");
+        logger.info("generateSheet(): start generate sheet " + sheetName + ".");
         Sheet sh = wb.createSheet(sheetName);
         initStyleOfCells(wb);
         Row row = sh.createRow(0);
@@ -118,7 +118,7 @@ public class LogFileParserXLS {
                 String errorString = data.getErrorStr();
                 setStringValueWithCheck(cell, errorString);
             }
-            logger.info("generateSheet() - finish generate sheet - " + sheetName + ".");
+            logger.info("generateSheet(): finish generate sheet " + sheetName + ".");
         } catch (Exception e) {
             logger.error("generateSheet(). rowNumber = " + data.getRowNumber() + ". column = " + column, e);
             throw new TEAppException(e.getMessage(), e);

@@ -170,17 +170,21 @@ public class LogRecord implements Comparable<LogRecord> {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         LogRecord record = (LogRecord) o;
-        return Objects.equals(category, record.category) && Objects.equals(priority, record.priority) && Objects.equals(messageStr, record.messageStr) && Objects.equals(stackTraceStr, record.stackTraceStr);
+        return Objects.equals(priority, record.priority) && Objects.equals(category, record.category) && Objects.equals(messageStr, record.messageStr) && Objects.equals(stackTraceStr, record.stackTraceStr);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(category, priority, messageStr, stackTraceStr);
+        return Objects.hash(priority, category, messageStr, stackTraceStr);
     }
 
     @Override
     public int compareTo(LogRecord o) {
-        return this.rowNumber - o.rowNumber;
+        int result = this.logName.compareTo(o.logName);
+        if(result == 0) result = this.date.compareTo(o.date);
+        if(result == 0) result = this.time.compareTo(o.time);
+        if(result == 0) result = this.rowNumber - o.rowNumber;
+        return result;
     }
 }
 

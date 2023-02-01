@@ -8,7 +8,6 @@ import org.json.JSONObject;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 
@@ -35,7 +34,7 @@ public class LogFileParserServlet extends HttpServlet {
         } else if (ACTION_PARSE_LOG_FILE.equals(actionName)) {
             try {
                 logFileParserDelegate.parseLogFile(request, response);
-            } catch (TEAppException | FileNotFoundException e) {
+            } catch (TEAppException e) {
                 response.setHeader("Set-Cookie", "fileDownload=false; path=/");
                 sendStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
             }
