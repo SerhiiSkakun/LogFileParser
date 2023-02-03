@@ -7,6 +7,7 @@ import java.io.*;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.*;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -15,8 +16,9 @@ public class LogFileParser {
     private static final Logger logger = Logger.getLogger(CLAZZ);
 
     private final int MAX_ROWS_FOR_SHEET = 1_000_000;
-    private final double CONFORMITY_POWER = 0.75;
-    private final Pattern PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} ");
+    private final double CONFORMITY_POWER = 0.80;
+    private final Pattern LOGFILE_DATE_TIME_PATTERN = Pattern.compile("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2},\\d{3} ");
+    private List<Pattern> MESSAGE_PATTERN_LIST;
 
     private final List<File> sourceFiles;
     private final boolean isUniqRecords;
@@ -45,6 +47,18 @@ public class LogFileParser {
         this.isTeStackTraceOnly = isTeStackTraceOnly;
         this.startRow = startRow;
         this.finishRow = finishRow;
+        if(isGatherMessages){
+            MESSAGE_PATTERN_LIST = new ArrayList<Pattern>(){{
+                add(Pattern.compile("(?s)^(.*?)\\b*(\\d{2,4}-\\d{2}-\\d{2,4} \\d{2}:\\d{2}:\\d{2}[.,]?\\d*)\\b*(.*?)$"));   // 2023-02-02 22:25.123
+                add(Pattern.compile("(?s)^(.*?)\\b*(\\d{2}-\\w{3}-\\d{2}\\s\\d{2}:\\d{2}:\\d{2})\\b*(.*?)$"));              // 04-Dec-22 05:24:22
+                add(Pattern.compile("(?s)^(.*?)\\b*(\\d+\\.\\d+\\.\\d+\\.\\d+\\.\\d+)\\b*(.*?)$"));                         //14.123.02.86.7
+                add(Pattern.compile("(?s)^(.*?)\\b*(\\d+\\.\\d+\\.\\d+\\.\\d+)\\b*(.*?)$"));                                //141.101.238.127
+                add(Pattern.compile("(?s)^(.*?\\b*deviceToke=)([A-z0-9:-]+)\\b*(.*?)$"));                                   //deviceToke=cLZ5miNHQfmsMtlPRQvLIP:APA91bF3mKk1OwBjyvJ8P6pC6t-StR3wOuJTmTj--DYVoUZulsDWTWcMQ1WZ_t1tjHB_pjCQuSjoT6iRtLYEbUEZ1LgwIZdtO6yy3JhtIAkc90oVuO-WbJbRVb2Q1_GAFR2UzZX9z88_q13eJhWbLnkISqdZIjBeMnwa7W3cUrYn_i
+                add(Pattern.compile("(?s)^(.*?)\\b*(-\\d+\\.?\\d+)\\b*(.*?)$"));                                            // -25.897
+                add(Pattern.compile("(?s)^(.*?)\\b*(\\d+\\.\\d+)\\b*(.*?)$"));                                              // 25.897
+                add(Pattern.compile("(?s)^(.*?\\b*)(O\\w{1,2}-[Dd]uty)\\b*(.*?)$"));                                        //On-Duty
+            }};
+        }
     }
 
     public List<List<LogRecord>> parseLogFiles() throws TEAppException {
@@ -102,7 +116,7 @@ public class LogFileParser {
                 }
                 wasMessage = false;
                 wasStackTrace = false;
-            } else if (PATTERN.matcher(row).find()) { //row starts with date-time
+            } else if (LOGFILE_DATE_TIME_PATTERN.matcher(row).find()) { //row starts with date-time
                 if (!isMoreThanLimitRow) {
                     recordAdd(record, stackTrace, error, logRecordCollection, similarRowsQuantityMapByHash);
                     error = null;
@@ -187,7 +201,8 @@ public class LogFileParser {
                 || stackTraceRow.startsWith("org.")
                 || stackTraceRow.startsWith("com.zaxxer.hikari.pool")
                 || stackTraceRow.startsWith("com.sun.")
-                || stackTraceRow.startsWith("sun.security."))) {
+                || stackTraceRow.startsWith("it.sauronsoftware.")
+                || stackTraceRow.startsWith("sun."))) {
             stackTrace.add(stackTraceRow);
         }
         return stackTrace;
@@ -202,7 +217,8 @@ public class LogFileParser {
         if (Objects.nonNull(record.getMessage()) && !record.getMessage().isEmpty()) {
             String messageStr = String.join(System.lineSeparator(), record.getMessage());
             record.setMessageStr(messageStr);
-            List<String> tokenList = Arrays.asList(messageStr.split("\\b"));
+            List<String> tokenList = new ArrayList<>();
+            createTokenList(messageStr, tokenList);
             record.setMessageTokens(tokenList);
         }
         if (Objects.nonNull(error)) {
@@ -213,6 +229,22 @@ public class LogFileParser {
         if (isUniqRecords) {
             similarRowsQuantityMapByHash.merge(record.hashCode(), 1, Integer::sum);
         }
+    }
+
+    private void createTokenList(String messageStr, List<String> tokenList) {
+        if(messageStr.isEmpty()) return;
+        if(isGatherMessages) {
+            for (Pattern pattern : MESSAGE_PATTERN_LIST) {
+                Matcher matcher = pattern.matcher(messageStr);
+                if (matcher.find()) {
+                    createTokenList(messageStr.substring(matcher.start(1), matcher.end(1)), tokenList);
+                    tokenList.add(messageStr.substring(matcher.start(2), matcher.end(2)));
+                    createTokenList(messageStr.substring(matcher.start(3), matcher.end(3)), tokenList);
+                    return;
+                }
+            }
+        }
+        tokenList.addAll(Arrays.asList(messageStr.split("\\b")));
     }
 
     private List<LogRecord> joinRecordWithSimilarMessages(Collection<LogRecord> logRecordCollection) throws TEAppException{
